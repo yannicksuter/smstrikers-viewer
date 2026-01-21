@@ -263,8 +263,8 @@ bool Shader::createUnlitShader() {
         out vec4 FragColor;
         
         void main() {
-            // Debug: output pure white to test
-            FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+            // Output the vertex color (albedo) without lighting
+            FragColor = vec4(Color, 1.0);
         }
     )";
     
