@@ -165,8 +165,17 @@ bool Viewer::initImGui() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     
-    // Enable keyboard navigation
+    // Enable keyboard navigation and docking
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+    
+    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+    ImGuiStyle& style = ImGui::GetStyle();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
     
     // Setup style
     ImGui::StyleColorsDark();
@@ -196,14 +205,35 @@ void Viewer::loadDummyAssets() {
     AssetItem mario;
     mario.name = "Mario";
     mario.type = "model";
-    mario.children.push_back({"Body", "mesh", "", {}});
-    mario.children.push_back({"Head", "mesh", "", {}});
+    mario.vertexCount = 1245;
+    mario.triangleCount = 856;
+    mario.faceCount = 428;
+    
+    AssetItem marioBody;
+    marioBody.name = "Body";
+    marioBody.type = "mesh";
+    marioBody.vertexCount = 782;
+    marioBody.triangleCount = 524;
+    marioBody.faceCount = 262;
+    mario.children.push_back(marioBody);
+    
+    AssetItem marioHead;
+    marioHead.name = "Head";
+    marioHead.type = "mesh";
+    marioHead.vertexCount = 463;
+    marioHead.triangleCount = 332;
+    marioHead.faceCount = 166;
+    mario.children.push_back(marioHead);
+    
     mario.children.push_back({"Skeleton", "bones", "", {}});
     characters.children.push_back(mario);
     
     AssetItem luigi;
     luigi.name = "Luigi";
     luigi.type = "model";
+    luigi.vertexCount = 1198;
+    luigi.triangleCount = 834;
+    luigi.faceCount = 417;
     luigi.children.push_back({"Body", "mesh", "", {}});
     luigi.children.push_back({"Head", "mesh", "", {}});
     characters.children.push_back(luigi);
@@ -213,8 +243,22 @@ void Viewer::loadDummyAssets() {
     AssetItem environments;
     environments.name = "Environments";
     environments.type = "folder";
-    environments.children.push_back({"Stadium", "model", "", {}});
-    environments.children.push_back({"Field", "model", "", {}});
+    
+    AssetItem stadium;
+    stadium.name = "Stadium";
+    stadium.type = "model";
+    stadium.vertexCount = 5842;
+    stadium.triangleCount = 4128;
+    stadium.faceCount = 2064;
+    environments.children.push_back(stadium);
+    
+    AssetItem field;
+    field.name = "Field";
+    field.type = "model";
+    field.vertexCount = 2341;
+    field.triangleCount = 1678;
+    field.faceCount = 839;
+    environments.children.push_back(field);
     
     m_assetTree.push_back(environments);
 }
@@ -422,18 +466,30 @@ void Viewer::renderUI() {
     // Main menu bar
     renderMenuBar();
     
-    // Get main viewport
+    // Setup dockspace over the viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImVec2 menuBarSize = ImVec2(0, ImGui::GetFrameHeight());
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
     
-    // Asset tree panel - left side, fixed width
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + menuBarSize.y));
-    ImGui::SetNextWindowSize(ImVec2(300, viewport->Size.y - menuBarSize.y));
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+    window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("DockSpace", nullptr, window_flags);
+    ImGui::PopStyleVar(3);
+    
+    // Create dockspace
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    
+    ImGui::End();
+    
+    // Render Assets first so it can dock left, then Viewport fills remaining space
     renderAssetTree();
-    
-    // Viewport - fills remaining space
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + 300, viewport->Pos.y + menuBarSize.y));
-    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x - 300, viewport->Size.y - menuBarSize.y));
     renderViewport();
     
     // Config dialog
@@ -444,6 +500,15 @@ void Viewer::renderUI() {
     // Rendering
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
+    // Update and Render additional Platform Windows
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        GLFWwindow* backup_current_context = glfwGetCurrentContext();
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
+        glfwMakeContextCurrent(backup_current_context);
+    }
 }
 
 void Viewer::setObjectToRender(const std::string& objectName) {
@@ -540,14 +605,15 @@ void Viewer::renderMenuBar() {
 }
 
 void Viewer::renderAssetTree() {
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoMove | 
-                                    ImGuiWindowFlags_NoResize;
+    // Initial size
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowSize(ImVec2(300, viewport->WorkSize.y), ImGuiCond_FirstUseEver);
     
-    ImGui::Begin("Assets", nullptr, window_flags);
+    // Dock to left side on first use
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
     
-    ImGui::Text("Asset Browser");
-    ImGui::Separator();
+    ImGui::Begin("Assets");
     
     // Recursive function to render tree
     std::function<void(AssetItem&)> renderTreeNode = [&](AssetItem& item) {
@@ -606,20 +672,63 @@ void Viewer::renderAssetTree() {
         }
     };
     
-    // Render root items
+    // Render root items in a child window (top section)
+    ImGui::BeginChild("AssetTreeView", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 8), false);
     for (auto& item : m_assetTree) {
         renderTreeNode(item);
+    }
+    ImGui::EndChild();
+    
+    // Properties section (bottom section)
+    ImGui::Separator();
+    ImGui::Text("Properties");
+    ImGui::Separator();
+    
+    if (m_selectedAsset) {
+        ImGui::Text("Name: %s", m_selectedAsset->name.c_str());
+        ImGui::Text("Type: %s", m_selectedAsset->type.c_str());
+        
+        if (!m_selectedAsset->path.empty()) {
+            ImGui::Text("Path: %s", m_selectedAsset->path.c_str());
+        }
+        
+        // For mesh types, show geometry info
+        if (m_selectedAsset->type == "mesh" || m_selectedAsset->type == "model") {
+            ImGui::Separator();
+            ImGui::Text("Geometry Info:");
+            
+            // If we have mesh statistics stored, use them
+            if (m_selectedAsset->vertexCount > 0 || m_dummyMesh) {
+                if (m_selectedAsset->vertexCount > 0) {
+                    ImGui::Text("Vertices: %d", m_selectedAsset->vertexCount);
+                    ImGui::Text("Triangles: %d", m_selectedAsset->triangleCount);
+                    ImGui::Text("Faces: %d", m_selectedAsset->faceCount);
+                } else if (m_dummyMesh) {
+                    // Use actual mesh data
+                    ImGui::Text("Vertices: %d", m_dummyMesh->getVertexCount());
+                    ImGui::Text("Triangles: %d", m_dummyMesh->getTriangleCount());
+                    ImGui::Text("Faces: %d", 6); // Cube has 6 faces
+                }
+            } else {
+                ImGui::TextDisabled("No mesh loaded");
+            }
+        }
+    } else {
+        ImGui::TextDisabled("No asset selected");
     }
     
     ImGui::End();
 }
 
 void Viewer::renderViewport() {
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoMove | 
-                                    ImGuiWindowFlags_NoResize |
-                                    ImGuiWindowFlags_NoTitleBar;
+    // Viewport can't be closed but has title bar for proper decoration
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse;
     
+    // Dock to dockspace on first use (will take up remaining space)
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Viewport", nullptr, window_flags);
     
     // Check if mouse is hovering over this window's content area
@@ -674,27 +783,32 @@ void Viewer::renderViewport() {
         
         // Camera info overlay (only when object selected and enabled)
         if (m_selectedAsset && m_config.showCameraInfo) {
-            ImGui::SetCursorPos(ImVec2(10, 10));
-            ImGui::BeginChild("CamInfo", ImVec2(250, 50), true, ImGuiWindowFlags_NoScrollbar);
+            ImGui::SetCursorPos(ImVec2(10, 35));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Fully transparent
+            ImGui::BeginChild("CamInfo", ImVec2(250, 50), false, ImGuiWindowFlags_NoScrollbar);
             glm::vec3 camPos = m_camera->getPosition();
             ImGui::Text("Camera: %.1f, %.1f, %.1f", camPos.x, camPos.y, camPos.z);
             ImGui::Text("Distance: %.1f", m_camera->getDistance());
             ImGui::EndChild();
+            ImGui::PopStyleColor();
         }
             
         // Controls hint (only when object selected and enabled)
         if (m_selectedAsset && m_config.showControls) {
             ImGui::SetCursorPos(ImVec2(10, viewportSize.y - 80));
-            ImGui::BeginChild("Controls", ImVec2(250, 70), true, ImGuiWindowFlags_NoScrollbar);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Fully transparent
+            ImGui::BeginChild("Controls", ImVec2(250, 70), false, ImGuiWindowFlags_NoScrollbar);
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Right Mouse: Rotate");
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Middle Mouse: Pan");
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Mouse Wheel: Zoom");
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Home: Reset Camera");
             ImGui::EndChild();
+            ImGui::PopStyleColor();
         }
     }
     
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void Viewer::shutdown() {

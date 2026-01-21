@@ -57,6 +57,30 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/glfw)
 
+# Suppress warnings from GLFW external library
+if(TARGET glfw)
+    target_compile_options(glfw PRIVATE 
+        $<$<CXX_COMPILER_ID:AppleClang,Clang>:-w>
+        $<$<C_COMPILER_ID:AppleClang,Clang>:-w>
+        $<$<CXX_COMPILER_ID:GNU>:-w>
+        $<$<C_COMPILER_ID:GNU>:-w>
+        $<$<CXX_COMPILER_ID:MSVC>:/w>
+        $<$<C_COMPILER_ID:MSVC>:/w>
+    )
+endif()
+
+# Suppress warnings from GLFW external library
+if(TARGET glfw)
+    target_compile_options(glfw PRIVATE 
+        $<$<CXX_COMPILER_ID:AppleClang,Clang>:-w>
+        $<$<C_COMPILER_ID:AppleClang,Clang>:-w>
+        $<$<CXX_COMPILER_ID:GNU>:-w>
+        $<$<C_COMPILER_ID:GNU>:-w>
+        $<$<CXX_COMPILER_ID:MSVC>:/w>
+        $<$<C_COMPILER_ID:MSVC>:/w>
+    )
+endif()
+
 # GLAD - OpenGL loader (using cmake subdirectory)
 add_subdirectory(external/glad-source/cmake)
 glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
@@ -72,13 +96,12 @@ file(GLOB IMGUI_SOURCES
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 add_library(imgui STATIC ${IMGUI_SOURCES})
-target_include_directories(imgui PUBLIC 
+target_include_directories(imgui SYSTEM PUBLIC 
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )
 target_link_libraries(imgui 
-    PRIVATE glfw OpenGL::GL
-    INTERFACE glfw  # Need GLFW headers for imgui_impl_glfw.h
+    PUBLIC glfw OpenGL::GL
 )
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GLAD)
 
@@ -91,10 +114,15 @@ add_library(imguizmo STATIC
     ${IMGUIZMO_DIR}/ImGradient.cpp
     ${IMGUIZMO_DIR}/ImSequencer.cpp
 )
-target_include_directories(imguizmo PUBLIC ${IMGUIZMO_DIR})
+target_include_directories(imguizmo SYSTEM PUBLIC ${IMGUIZMO_DIR})
 target_link_libraries(imguizmo 
-    PRIVATE imgui
-    INTERFACE imgui  # Need imgui headers for ImGuizmo.h
+    PUBLIC imgui
+)
+# Suppress warnings for external library code
+target_compile_options(imguizmo PRIVATE 
+    $<$<CXX_COMPILER_ID:AppleClang,Clang>:-w>
+    $<$<CXX_COMPILER_ID:GNU>:-w>
+    $<$<CXX_COMPILER_ID:MSVC>:/w>
 )
 
 # nlohmann/json - JSON parsing library (header-only)
@@ -138,8 +166,7 @@ target_link_libraries(${PROJECT_NAME}
         OpenGL::GL
         glad_gl_core_33
         glm::glm
-        imgui
-        imguizmo
+        imguizmo  # imguizmo already links imgui publicly, so we don't need to list imgui again
         nlohmann_json
 )
 

@@ -31,6 +31,21 @@ public:
     void render();
 
     /**
+     * @brief Get number of vertices
+     */
+    unsigned int getVertexCount() const;
+    
+    /**
+     * @brief Get number of indices (for indexed rendering)
+     */
+    unsigned int getIndexCount() const { return m_indexCount; }
+    
+    /**
+     * @brief Get number of triangles
+     */
+    unsigned int getTriangleCount() const { return m_indexCount / 3; }
+
+    /**
      * @brief Clean up OpenGL resources
      */
     void cleanup();
@@ -40,6 +55,7 @@ private:
     GLuint m_vbo;
     GLuint m_ebo;
     unsigned int m_indexCount;
+    unsigned int m_vertexCount;
 };
 
 /**

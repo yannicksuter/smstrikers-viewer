@@ -34,6 +34,11 @@ struct AssetItem {
     std::string path;  // File path for loadable assets
     std::vector<AssetItem> children;
     bool isSelected = false;
+    
+    // Mesh statistics (for mesh/model types)
+    int vertexCount = 0;
+    int triangleCount = 0;
+    int faceCount = 0;
 };
 
 /**

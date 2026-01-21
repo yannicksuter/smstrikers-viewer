@@ -13,6 +13,7 @@ Mesh::Mesh()
     , m_vbo(0)
     , m_ebo(0)
     , m_indexCount(0)
+    , m_vertexCount(0)
 {
 }
 
@@ -113,6 +114,10 @@ void Mesh::render() {
     glBindVertexArray(m_vao);
     glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+unsigned int Mesh::getVertexCount() const {
+    return m_vertexCount;
 }
 
 void Mesh::cleanup() {
