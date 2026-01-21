@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(SMStrikersViewer VERSION 0.1.0 LANGUAGES CXX)
+project(SMStrikersViewer VERSION 0.1.0 LANGUAGES C CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -46,31 +46,87 @@ find_package(OpenGL REQUIRED)
 # Option to build with system libraries or fetch them
 option(USE_SYSTEM_LIBS "Use system libraries instead of fetching" OFF)
 
-# External dependencies will be added here
-# For now, we'll prepare the structure for common libraries like:
-# - GLFW (window/input management)
-# - GLAD or GLEW (OpenGL loading)
-# - GLM (math library)
-# - ImGui (UI, optional)
+# =============================================================================
+# External Libraries
+# =============================================================================
 
-# TODO: Add external libraries via FetchContent or find_package
-# include(external/external.cmake)
+# GLFW - Window and input management
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/glfw)
+
+# GLAD - OpenGL loader (using cmake subdirectory)
+add_subdirectory(external/glad-source/cmake)
+glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
+
+# GLM - Mathematics library
+add_subdirectory(external/glm)
+
+# ImGui - UI library
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+file(GLOB IMGUI_SOURCES 
+    ${IMGUI_DIR}/*.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+add_library(imgui STATIC ${IMGUI_SOURCES})
+target_include_directories(imgui PUBLIC 
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+target_link_libraries(imgui 
+    PRIVATE glfw OpenGL::GL
+    INTERFACE glfw  # Need GLFW headers for imgui_impl_glfw.h
+)
+target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GLAD)
+
+# ImGuizmo - 3D manipulation gizmos
+set(IMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/ImGuizmo)
+add_library(imguizmo STATIC 
+    ${IMGUIZMO_DIR}/ImGuizmo.cpp
+    ${IMGUIZMO_DIR}/GraphEditor.cpp
+    ${IMGUIZMO_DIR}/ImCurveEdit.cpp
+    ${IMGUIZMO_DIR}/ImGradient.cpp
+    ${IMGUIZMO_DIR}/ImSequencer.cpp
+)
+target_include_directories(imguizmo PUBLIC ${IMGUIZMO_DIR})
+target_link_libraries(imguizmo 
+    PRIVATE imgui
+    INTERFACE imgui  # Need imgui headers for ImGuizmo.h
+)
+
+# nlohmann/json - JSON parsing library (header-only)
+add_library(nlohmann_json INTERFACE)
+target_include_directories(nlohmann_json INTERFACE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/json/include
+)
 
 # Include directories
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/external
     ${OPENGL_INCLUDE_DIRS}
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+    ${IMGUIZMO_DIR}
 )
 
 # Source files
 set(VIEWER_SOURCES
     src/main.cpp
     src/viewer.cpp
+    src/camera.cpp
+    src/mesh.cpp
+    src/config.cpp
 )
 
 set(VIEWER_HEADERS
     include/viewer.h
+    include/camera.h
+    include/mesh.h
+    include/config.h
 )
 
 # Create executable
@@ -80,6 +136,11 @@ add_executable(${PROJECT_NAME} ${VIEWER_SOURCES} ${VIEWER_HEADERS})
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
         OpenGL::GL
+        glad_gl_core_33
+        glm::glm
+        imgui
+        imguizmo
+        nlohmann_json
 )
 
 # Platform-specific linking

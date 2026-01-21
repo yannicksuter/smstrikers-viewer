@@ -104,7 +104,68 @@ smstrikers-viewer/
 
 ## Usage
 
-**Coming soon** - Viewer is under active development.
+### Running the Viewer
+
+```bash
+# From the project root directory
+./build/bin/smstrikers-viewer
+
+# Or with command-line options
+./build/bin/smstrikers-viewer --no_gui          # Headless mode (for testing)
+./build/bin/smstrikers-viewer --object Mario    # Preselect an object
+```
+
+### Setting Up Assets
+
+1. **Extract game assets** from your legitimate copy of Super Mario Strikers:
+   - Use Dolphin Emulator's filesystem browser (Right-click game → Properties → Filesystem)
+   - Export files to the `assets/` directory
+
+2. **Organize files** following the recommended structure:
+   ```
+   assets/
+   ├── assets.json         # Edit this to define your asset tree
+   ├── models/
+   │   ├── characters/
+   │   └── environments/
+   └── textures/
+   ```
+
+3. **Edit `assets/assets.json`** to define the asset hierarchy shown in the viewer
+
+4. **Launch the viewer** and browse your assets!
+
+See [docs/ASSETS.md](docs/ASSETS.md) for detailed documentation on the asset system.
+
+### Controls
+
+- **Right Mouse Button**: Rotate camera around object
+- **Middle Mouse Button**: Pan camera
+- **Mouse Wheel**: Zoom in/out
+- **Home Key**: Reset camera to default position
+- **ESC**: Exit application
+
+### Configuration
+
+Settings are saved automatically to `~/.smstrikers-viewer.conf`. Access them via:
+- **Menu**: View → Settings
+
+Available settings:
+- Camera controls (pan inversion)
+- Default render mode (Wireframe/Opaque/Shaded)
+- UI visibility (gizmo, camera info, controls)
+
+## Current Features
+
+✅ Asset browser with JSON-based manifest  
+✅ Orbital camera controls  
+✅ Multiple render modes (Wireframe, Opaque, Shaded)  
+✅ Configurable UI and controls  
+✅ Command-line options  
+
+🚧 Game asset format parsing (in development)  
+🚧 Texture loading  
+🚧 Animation playback  
 
 ## Contributing
 

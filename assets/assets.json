@@ -1,0 +1,84 @@
+{
+  "version": "1.0",
+  "description": "Super Mario Strikers Asset Manifest",
+  "comment": "This file defines the structure of game assets. Paths are relative to the assets/ directory.",
+  "assets": [
+    {
+      "name": "Characters",
+      "type": "folder",
+      "children": [
+        {
+          "name": "Mario",
+          "type": "model",
+          "path": "models/characters/mario.bin",
+          "children": [
+            {
+              "name": "Body",
+              "type": "mesh"
+            },
+            {
+              "name": "Head",
+              "type": "mesh"
+            },
+            {
+              "name": "Skeleton",
+              "type": "bones"
+            }
+          ]
+        },
+        {
+          "name": "Luigi",
+          "type": "model",
+          "path": "models/characters/luigi.bin",
+          "children": [
+            {
+              "name": "Body",
+              "type": "mesh"
+            },
+            {
+              "name": "Head",
+              "type": "mesh"
+            }
+          ]
+        },
+        {
+          "name": "Peach",
+          "type": "model",
+          "path": "models/characters/peach.bin"
+        },
+        {
+          "name": "Daisy",
+          "type": "model",
+          "path": "models/characters/daisy.bin"
+        }
+      ]
+    },
+    {
+      "name": "Environments",
+      "type": "folder",
+      "children": [
+        {
+          "name": "Stadium",
+          "type": "model",
+          "path": "models/environments/stadium.bin"
+        },
+        {
+          "name": "Field",
+          "type": "model",
+          "path": "models/environments/field.bin"
+        }
+      ]
+    },
+    {
+      "name": "Effects",
+      "type": "folder",
+      "children": [
+        {
+          "name": "Fire Ball",
+          "type": "model",
+          "path": "models/effects/fireball.bin"
+        }
+      ]
+    }
+  ]
+}

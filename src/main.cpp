@@ -26,12 +26,17 @@ void printUsage(const char* programName) {
     std::cout << "Usage: " << programName << " [options]" << std::endl;
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --help, -h     Show this help message" << std::endl;
-    std::cout << "  --version, -v  Show version information" << std::endl;
+    std::cout << "  --help, -h        Show this help message" << std::endl;
+    std::cout << "  --version, -v     Show version information" << std::endl;
+    std::cout << "  --no_gui          Run without GUI (direct 3D rendering)" << std::endl;
+    std::cout << "  --object <name>   Specify object to render (used with --no_gui)" << std::endl;
     std::cout << std::endl;
 }
 
 int main(int argc, char* argv[]) {
+    bool noGui = false;
+    std::string objectName = "";
+    
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -44,16 +49,33 @@ int main(int argc, char* argv[]) {
             std::cout << "Super Mario Strikers Viewer v0.1.0" << std::endl;
             return EXIT_SUCCESS;
         }
+        else if (arg == "--no_gui") {
+            noGui = true;
+        }
+        else if (arg == "--object" && i + 1 < argc) {
+            objectName = argv[++i];
+        }
     }
     
     printBanner();
     
+    if (noGui) {
+        std::cout << "Running in no-GUI mode" << std::endl;
+        if (!objectName.empty()) {
+            std::cout << "Object: " << objectName << std::endl;
+        }
+    }
+    
     // Create and initialize viewer
     SMStrikers::Viewer viewer;
     
-    if (!viewer.initialize(1280, 720, "Super Mario Strikers Viewer")) {
+    if (!viewer.initialize(1280, 720, "Super Mario Strikers Viewer", noGui)) {
         std::cerr << "Failed to initialize viewer!" << std::endl;
         return EXIT_FAILURE;
+    }
+    
+    if (!objectName.empty()) {
+        viewer.setObjectToRender(objectName);
     }
     
     // Run the application

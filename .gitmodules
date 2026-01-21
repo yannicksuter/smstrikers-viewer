@@ -1,0 +1,18 @@
+[submodule "external/glfw"]
+	path = external/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "external/glm"]
+	path = external/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/ImGuizmo"]
+	path = external/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo.git
+[submodule "external/glad-source"]
+	path = external/glad-source
+	url = https://github.com/Dav1dde/glad.git
+[submodule "external/json"]
+	path = external/json
+	url = https://github.com/nlohmann/json.git
