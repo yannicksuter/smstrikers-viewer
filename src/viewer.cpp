@@ -180,6 +180,15 @@ bool Viewer::initImGui() {
     // Setup style
     ImGui::StyleColorsDark();
     
+    // Configure font rendering for better quality
+    ImFontConfig fontConfig;
+    fontConfig.OversampleH = m_config.fontOversampleH;  // Horizontal oversampling
+    fontConfig.OversampleV = m_config.fontOversampleV;  // Vertical oversampling
+    fontConfig.PixelSnapH = m_config.fontPixelSnapH;  // Subpixel positioning
+    
+    // Load default font with antialiasing
+    io.Fonts->AddFontDefault(&fontConfig);
+    
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -910,6 +919,26 @@ void Viewer::renderConfigDialog() {
         if (ImGui::Checkbox("Show Gizmo", &m_config.showGizmo)) configChanged = true;
         if (ImGui::Checkbox("Show Camera Info", &m_config.showCameraInfo)) configChanged = true;
         if (ImGui::Checkbox("Show Controls", &m_config.showControls)) configChanged = true;
+        
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.8f, 0.9f, 1.0f, 1.0f), "Font Settings");
+        ImGui::Separator();
+        bool fontChanged = false;
+        if (ImGui::SliderInt("Horizontal Oversampling", &m_config.fontOversampleH, 1, 5)) {
+            configChanged = true;
+            fontChanged = true;
+        }
+        if (ImGui::SliderInt("Vertical Oversampling", &m_config.fontOversampleV, 1, 5)) {
+            configChanged = true;
+            fontChanged = true;
+        }
+        if (ImGui::Checkbox("Pixel Snap (less smooth)", &m_config.fontPixelSnapH)) {
+            configChanged = true;
+            fontChanged = true;
+        }
+        if (fontChanged) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Restart required for font changes");
+        }
         
         // Auto-save when config changes
         if (configChanged) {

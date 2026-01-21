@@ -51,6 +51,12 @@ bool Config::load(const std::string& filename) {
             showCameraInfo = (value == "true" || value == "1");
         } else if (key == "showControls") {
             showControls = (value == "true" || value == "1");
+        } else if (key == "fontOversampleH") {
+            fontOversampleH = std::stoi(value);
+        } else if (key == "fontOversampleV") {
+            fontOversampleV = std::stoi(value);
+        } else if (key == "fontPixelSnapH") {
+            fontPixelSnapH = (value == "true" || value == "1");
         }
     }
     
@@ -75,6 +81,10 @@ bool Config::save(const std::string& filename) const {
     file << "showGizmo=" << (showGizmo ? "true" : "false") << "\n";
     file << "showCameraInfo=" << (showCameraInfo ? "true" : "false") << "\n";
     file << "showControls=" << (showControls ? "true" : "false") << "\n";
+    file << "\n# Font Settings\n";
+    file << "fontOversampleH=" << fontOversampleH << "\n";
+    file << "fontOversampleV=" << fontOversampleV << "\n";
+    file << "fontPixelSnapH=" << (fontPixelSnapH ? "true" : "false") << "\n";
     
     std::cout << "Saved config to: " << filename << std::endl;
     return true;

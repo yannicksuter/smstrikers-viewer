@@ -22,6 +22,11 @@ struct Config {
     bool showCameraInfo = true;
     bool showControls = true;
     
+    // Font settings
+    int fontOversampleH = 3;
+    int fontOversampleV = 2;
+    bool fontPixelSnapH = false;
+    
     /**
      * @brief Load config from file
      */
