@@ -1,0 +1,123 @@
+# Build directories
+build/
+bin/
+out/
+cmake-build-*/
+*.dir/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+*.cmake.in
+Makefile
+
+# Ninja build files
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+
+# Compiled Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+*.la
+
+# Executables
+*.exe
+*.out
+*.app
+*.x86_64
+*.i*86
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.user
+*.userosscache
+*.suo
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+# Profiling and analysis
+*.gcno
+*.gcda
+*.gcov
+callgrind.out.*
+perf.data*
+
+# Package managers
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
+
+# vcpkg
+vcpkg_installed/
+
+# Documentation generation
+docs/html/
+docs/latex/
+docs/doxygen_sqlite3.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.cache
+
+# Game assets - NEVER commit original game files!
+# These directories should only contain user-provided files
+assets/game/
+assets/extracted/
+roms/
+*.gcm
+*.iso
+*.wbfs
+*.dol
+*.elf
+
+# Test outputs
+test_output/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Distribution
+dist/
+package/
+*.tar.gz
+*.zip
