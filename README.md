@@ -119,21 +119,18 @@ smstrikers-viewer/
 
 1. **Extract game assets** from your legitimate copy of Super Mario Strikers:
    - Use Dolphin Emulator's filesystem browser (Right-click game → Properties → Filesystem)
-   - Export files to the `assets/` directory
+   - Export files to your configured asset root (default: `game_assets/`)
 
 2. **Organize files** following the recommended structure:
    ```
-   assets/
-   ├── assets.json         # Edit this to define your asset tree
+   game_assets/
    ├── models/
    │   ├── characters/
    │   └── environments/
    └── textures/
    ```
 
-3. **Edit `assets/assets.json`** to define the asset hierarchy shown in the viewer
-
-4. **Launch the viewer** and browse your assets!
+3. **Launch the viewer** and browse your assets!
 
 See [docs/ASSETS.md](docs/ASSETS.md) for detailed documentation on the asset system.
 
@@ -154,10 +151,11 @@ Available settings:
 - Camera controls (pan inversion)
 - Default render mode (Wireframe/Opaque/Shaded)
 - UI visibility (gizmo, camera info, controls)
+- Asset root path (filesystem-based tree)
 
 ## Current Features
 
-✅ Asset browser with JSON-based manifest  
+✅ Asset browser backed by filesystem scan  
 ✅ Orbital camera controls  
 ✅ Multiple render modes (Wireframe, Opaque, Shaded)  
 ✅ Configurable UI and controls  

@@ -26,6 +26,9 @@ struct Config {
     int fontOversampleH = 3;
     int fontOversampleV = 2;
     bool fontPixelSnapH = false;
+
+    // Asset settings
+    std::string assetsRoot = "game_assets";
     
     /**
      * @brief Load config from file

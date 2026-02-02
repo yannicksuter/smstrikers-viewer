@@ -148,6 +148,9 @@ set(VIEWER_SOURCES
     src/camera.cpp
     src/mesh.cpp
     src/config.cpp
+    src/asset_tree.cpp
+    src/asset_tree_view.cpp
+    src/asset_loader.cpp
 )
 
 set(VIEWER_HEADERS
@@ -155,6 +158,9 @@ set(VIEWER_HEADERS
     include/camera.h
     include/mesh.h
     include/config.h
+    include/asset_tree.h
+    include/asset_tree_view.h
+    include/asset_loader.h
 )
 
 # Create executable

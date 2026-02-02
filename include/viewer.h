@@ -2,15 +2,21 @@
 #define SMSTRIKERS_VIEWER_H
 
 #include <glad/gl.h>
+#include <imgui.h>
 #include <string>
-#include <vector>
 #include <memory>
-#include <nlohmann/json_fwd.hpp>
+#include <array>
+#include <vector>
 #include "config.h"
+#include "asset_tree.h"
+#include "asset_tree_view.h"
+#include "asset_loader.h"
 
 struct GLFWwindow;
 
 namespace SMStrikers {
+
+struct TextureBundle;
 
 class Camera;
 class Mesh;
@@ -23,22 +29,6 @@ enum class RenderMode {
     Wireframe,
     Opaque,
     Shaded
-};
-
-/**
- * @brief Asset item in the tree view
- */
-struct AssetItem {
-    std::string name;
-    std::string type;
-    std::string path;  // File path for loadable assets
-    std::vector<AssetItem> children;
-    bool isSelected = false;
-    
-    // Mesh statistics (for mesh/model types)
-    int vertexCount = 0;
-    int triangleCount = 0;
-    int faceCount = 0;
 };
 
 /**
@@ -96,6 +86,7 @@ private:
     void renderViewport();
     void renderMenuBar();
     void renderConfigDialog();
+    void renderFolderPicker();
     
     // Direct rendering (no GUI)
     void renderDirectMode();
@@ -114,9 +105,11 @@ private:
     static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
     
     // Asset management
-    void loadDummyAssets(); // For testing
-    bool loadAssetsFromJSON(const std::string& jsonPath);
-    void parseAssetItem(const nlohmann::json& jsonItem, AssetItem& item);
+    void refreshAssetTree();
+    void handleAssetSelection(const AssetNode* node);
+    void openFolderPicker();
+    void clearLoadedTextures();
+    void buildLoadedTextures(const TextureBundle& bundle);
 
     bool m_initialized;
     bool m_noGui;
@@ -151,8 +144,33 @@ private:
     bool m_isViewportHovered;
     
     // Assets
-    std::vector<AssetItem> m_assetTree;
-    AssetItem* m_selectedAsset;
+    AssetTreeModel m_assetTreeModel;
+    AssetTreeView m_assetTreeView;
+    AssetLoaderRegistry m_assetLoaders;
+    std::string m_selectedAssetPath;
+    std::string m_lastLoadedPath;
+    AssetLoadResult m_lastLoadResult;
+    std::string m_lastLoaderName;
+    bool m_hasLoadResult = false;
+
+    struct LoadedTexture {
+        uint32_t hash = 0;
+        uint16_t width = 0;
+        uint16_t height = 0;
+        uint32_t format = 0;
+        GLuint textureId = 0;
+    };
+    std::vector<LoadedTexture> m_loadedTextures;
+    int m_selectedTextureIndex = 0;
+    std::string m_loadedTexturePath;
+    float m_thumbnailSize = 72.0f;
+    float m_textureZoom = 1.0f;
+    ImVec2 m_texturePan = ImVec2(0.0f, 0.0f);
+
+    std::array<char, 512> m_assetsRootBuffer{};
+    bool m_openFolderPicker = false;
+    std::string m_folderPickerPath;
+    std::string m_folderPickerSelected;
 };
 
 } // namespace SMStrikers

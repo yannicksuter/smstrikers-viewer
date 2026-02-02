@@ -7,16 +7,48 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <ImGuizmo.h>
-#include <nlohmann/json.hpp>
 #include <iostream>
-#include <fstream>
+#include <filesystem>
+#include <cstdio>
+#include <cfloat>
+#include <cmath>
+#include <functional>
+#include <algorithm>
+#include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-using json = nlohmann::json;
-
 namespace SMStrikers {
+
+namespace {
+
+const char* textureFormatLabel(uint32_t format) {
+    switch (format) {
+    case 0:
+        return "RGB565";
+    case 1:
+        return "RGB5A3";
+    case 2:
+        return "CMPR";
+    case 3:
+        return "RGBA8";
+    case 4:
+        return "I8";
+    case 5:
+        return "I4";
+    case 6:
+        return "A8";
+    case 7:
+        return "IA8";
+    case 8:
+        return "CI8";
+    default:
+        return "Unknown";
+    }
+}
+
+} // namespace
 
 Viewer::Viewer()
     : m_initialized(false)
@@ -38,7 +70,14 @@ Viewer::Viewer()
     , m_isRotating(false)
     , m_isPanning(false)
     , m_isViewportHovered(false)
-    , m_selectedAsset(nullptr)
+    , m_selectedAssetPath("")
+    , m_lastLoadedPath("")
+    , m_lastLoadResult()
+    , m_lastLoaderName("")
+    , m_hasLoadResult(false)
+    , m_openFolderPicker(false)
+    , m_folderPickerPath("")
+    , m_folderPickerSelected("")
 {
 }
 
@@ -79,6 +118,7 @@ bool Viewer::initialize(int width, int height, const std::string& title, bool no
     // Load config
     m_config.load(Config::getDefaultPath());
     m_renderMode = static_cast<RenderMode>(m_config.defaultRenderMode);
+    std::snprintf(m_assetsRootBuffer.data(), m_assetsRootBuffer.size(), "%s", m_config.assetsRoot.c_str());
     
     // Create dummy mesh and shaders
     m_dummyMesh.reset(Mesh::createCube(2.0f));
@@ -95,8 +135,8 @@ bool Viewer::initialize(int width, int height, const std::string& title, bool no
         return false;
     }
     
-    // Load dummy assets for testing
-    loadDummyAssets();
+    // Load assets from filesystem
+    refreshAssetTree();
     
     m_initialized = true;
     std::cout << "Initialization complete!" << std::endl;
@@ -196,140 +236,6 @@ bool Viewer::initImGui() {
     return true;
 }
 
-void Viewer::loadDummyAssets() {
-    // Try to load from JSON first
-    std::string jsonPath = "assets/assets.json";
-    if (loadAssetsFromJSON(jsonPath)) {
-        std::cout << "Loaded assets from: " << jsonPath << std::endl;
-        return;
-    }
-    
-    std::cout << "Could not load " << jsonPath << ", using dummy assets" << std::endl;
-    
-    // Fallback: Create dummy asset tree for testing
-    AssetItem characters;
-    characters.name = "Characters";
-    characters.type = "folder";
-    
-    AssetItem mario;
-    mario.name = "Mario";
-    mario.type = "model";
-    mario.vertexCount = 1245;
-    mario.triangleCount = 856;
-    mario.faceCount = 428;
-    
-    AssetItem marioBody;
-    marioBody.name = "Body";
-    marioBody.type = "mesh";
-    marioBody.vertexCount = 782;
-    marioBody.triangleCount = 524;
-    marioBody.faceCount = 262;
-    mario.children.push_back(marioBody);
-    
-    AssetItem marioHead;
-    marioHead.name = "Head";
-    marioHead.type = "mesh";
-    marioHead.vertexCount = 463;
-    marioHead.triangleCount = 332;
-    marioHead.faceCount = 166;
-    mario.children.push_back(marioHead);
-    
-    mario.children.push_back({"Skeleton", "bones", "", {}});
-    characters.children.push_back(mario);
-    
-    AssetItem luigi;
-    luigi.name = "Luigi";
-    luigi.type = "model";
-    luigi.vertexCount = 1198;
-    luigi.triangleCount = 834;
-    luigi.faceCount = 417;
-    luigi.children.push_back({"Body", "mesh", "", {}});
-    luigi.children.push_back({"Head", "mesh", "", {}});
-    characters.children.push_back(luigi);
-    
-    m_assetTree.push_back(characters);
-    
-    AssetItem environments;
-    environments.name = "Environments";
-    environments.type = "folder";
-    
-    AssetItem stadium;
-    stadium.name = "Stadium";
-    stadium.type = "model";
-    stadium.vertexCount = 5842;
-    stadium.triangleCount = 4128;
-    stadium.faceCount = 2064;
-    environments.children.push_back(stadium);
-    
-    AssetItem field;
-    field.name = "Field";
-    field.type = "model";
-    field.vertexCount = 2341;
-    field.triangleCount = 1678;
-    field.faceCount = 839;
-    environments.children.push_back(field);
-    
-    m_assetTree.push_back(environments);
-}
-
-bool Viewer::loadAssetsFromJSON(const std::string& jsonPath) {
-    try {
-        std::ifstream file(jsonPath);
-        if (!file.is_open()) {
-            return false;
-        }
-        
-        json data = json::parse(file);
-        
-        // Check for version
-        if (data.contains("version")) {
-            std::cout << "Asset manifest version: " << data["version"] << std::endl;
-        }
-        
-        // Parse assets
-        if (!data.contains("assets") || !data["assets"].is_array()) {
-            std::cerr << "Invalid JSON: missing 'assets' array" << std::endl;
-            return false;
-        }
-        
-        m_assetTree.clear();
-        
-        for (const auto& jsonItem : data["assets"]) {
-            AssetItem item;
-            parseAssetItem(jsonItem, item);
-            m_assetTree.push_back(item);
-        }
-        
-        return true;
-    } catch (const std::exception& e) {
-        std::cerr << "Error loading assets from JSON: " << e.what() << std::endl;
-        return false;
-    }
-}
-
-void Viewer::parseAssetItem(const json& jsonItem, AssetItem& item) {
-    // Required fields
-    if (jsonItem.contains("name")) {
-        item.name = jsonItem["name"];
-    }
-    if (jsonItem.contains("type")) {
-        item.type = jsonItem["type"];
-    }
-    
-    // Optional fields
-    if (jsonItem.contains("path")) {
-        item.path = jsonItem["path"];
-    }
-    
-    // Parse children recursively
-    if (jsonItem.contains("children") && jsonItem["children"].is_array()) {
-        for (const auto& jsonChild : jsonItem["children"]) {
-            AssetItem child;
-            parseAssetItem(jsonChild, child);
-            item.children.push_back(child);
-        }
-    }
-}
 
 int Viewer::run() {
     if (!m_initialized) {
@@ -522,10 +428,37 @@ void Viewer::renderUI() {
 
 void Viewer::setObjectToRender(const std::string& objectName) {
     std::cout << "Setting object to render: " << objectName << std::endl;
-    // For now, just select the first asset to show the dummy cube
-    // In the future, this would load the actual specified object
-    if (!m_assetTree.empty()) {
-        m_selectedAsset = &m_assetTree[0];
+    if (objectName.empty()) {
+        return;
+    }
+
+    const AssetNode* nodeByPath = m_assetTreeModel.findByPath(objectName);
+    if (nodeByPath) {
+        m_selectedAssetPath = nodeByPath->relativePath;
+        handleAssetSelection(nodeByPath);
+        return;
+    }
+
+    std::function<const AssetNode*(const std::vector<AssetNode>&)> findByName;
+    findByName = [&](const std::vector<AssetNode>& nodes) -> const AssetNode* {
+        for (const auto& node : nodes) {
+            if (node.name == objectName) {
+                return &node;
+            }
+            if (!node.children.empty()) {
+                const AssetNode* found = findByName(node.children);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    const AssetNode* nodeByName = findByName(m_assetTreeModel.roots());
+    if (nodeByName) {
+        m_selectedAssetPath = nodeByName->relativePath;
+        handleAssetSelection(nodeByName);
     }
 }
 
@@ -623,103 +556,128 @@ void Viewer::renderAssetTree() {
     ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
     
     ImGui::Begin("Assets");
-    
-    // Recursive function to render tree
-    std::function<void(AssetItem&)> renderTreeNode = [&](AssetItem& item) {
-        ImGuiTreeNodeFlags node_flags = ImGuiTreeNodeFlags_OpenOnArrow | 
-                                       ImGuiTreeNodeFlags_OpenOnDoubleClick;
-        
-        if (item.children.empty()) {
-            node_flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-        }
-        
-        if (item.isSelected) {
-            node_flags |= ImGuiTreeNodeFlags_Selected;
-        }
-        
-        // Icon based on type
-        const char* icon = "📄";
-        if (item.type == "folder") icon = "📁";
-        else if (item.type == "model") icon = "🧊";
-        else if (item.type == "mesh") icon = "▲";
-        else if (item.type == "bones") icon = "🦴";
-        
-        bool node_open = ImGui::TreeNodeEx(item.name.c_str(), node_flags, 
-                                          "%s %s", icon, item.name.c_str());
-        
-        // Handle selection
-        if (ImGui::IsItemClicked()) {
-            // Clear all selections (simple selection for now)
-            std::function<void(AssetItem&)> clearSelection = [&](AssetItem& i) {
-                i.isSelected = false;
-                for (auto& child : i.children) {
-                    clearSelection(child);
-                }
-            };
-            for (auto& root : m_assetTree) {
-                clearSelection(root);
-            }
-            
-            item.isSelected = true;
-            
-            // Only set selected asset for renderable types (not folders)
-            if (item.type != "folder") {
-                m_selectedAsset = &item;
-                std::cout << "Selected: " << item.name << " (" << item.type << ")" << std::endl;
-            } else {
-                m_selectedAsset = nullptr;
-                std::cout << "Selected folder: " << item.name << std::endl;
-            }
-        }
-        
-        // Render children
-        if (node_open && !item.children.empty()) {
-            for (auto& child : item.children) {
-                renderTreeNode(child);
-            }
-            ImGui::TreePop();
-        }
-    };
-    
+
+    ImGui::Text("Root: %s", m_config.assetsRoot.c_str());
+    if (!m_assetTreeModel.hasRoot() || m_assetTreeModel.roots().empty()) {
+        ImGui::TextDisabled("No assets found");
+    }
+
+    std::string previousSelection = m_selectedAssetPath;
+
     // Render root items in a child window (top section)
     ImGui::BeginChild("AssetTreeView", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 8), false);
-    for (auto& item : m_assetTree) {
-        renderTreeNode(item);
+    if (!m_assetTreeModel.roots().empty()) {
+        m_assetTreeView.renderTree(m_assetTreeModel.roots(), m_selectedAssetPath);
     }
     ImGui::EndChild();
+
+    if (previousSelection != m_selectedAssetPath) {
+        const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
+        handleAssetSelection(selectedNode);
+    }
     
     // Properties section (bottom section)
     ImGui::Separator();
     ImGui::Text("Properties");
     ImGui::Separator();
     
-    if (m_selectedAsset) {
-        ImGui::Text("Name: %s", m_selectedAsset->name.c_str());
-        ImGui::Text("Type: %s", m_selectedAsset->type.c_str());
-        
-        if (!m_selectedAsset->path.empty()) {
-            ImGui::Text("Path: %s", m_selectedAsset->path.c_str());
+    const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
+    if (selectedNode) {
+        ImGui::Text("Name: %s", selectedNode->name.c_str());
+        ImGui::Text("Type: %s", assetKindLabel(selectedNode->kind));
+        ImGui::Text("Path: %s", selectedNode->relativePath.c_str());
+
+        ImGui::Separator();
+        ImGui::Text("Loadable: %s", isLoadable(selectedNode->kind) ? "Yes" : "No");
+        if (selectedNode->kind == AssetKind::TextureBundle) {
+            ImGui::Text("Package: Texture Bundle (.glt)");
+        } else if (selectedNode->kind == AssetKind::ModelBundle) {
+            ImGui::Text("Package: Model Bundle (.glg)");
         }
-        
-        // For mesh types, show geometry info
-        if (m_selectedAsset->type == "mesh" || m_selectedAsset->type == "model") {
+
+        if (m_hasLoadResult && m_lastLoadedPath == selectedNode->relativePath) {
             ImGui::Separator();
-            ImGui::Text("Geometry Info:");
-            
-            // If we have mesh statistics stored, use them
-            if (m_selectedAsset->vertexCount > 0 || m_dummyMesh) {
-                if (m_selectedAsset->vertexCount > 0) {
-                    ImGui::Text("Vertices: %d", m_selectedAsset->vertexCount);
-                    ImGui::Text("Triangles: %d", m_selectedAsset->triangleCount);
-                    ImGui::Text("Faces: %d", m_selectedAsset->faceCount);
-                } else if (m_dummyMesh) {
-                    // Use actual mesh data
-                    ImGui::Text("Vertices: %d", m_dummyMesh->getVertexCount());
-                    ImGui::Text("Triangles: %d", m_dummyMesh->getTriangleCount());
-                    ImGui::Text("Faces: %d", 6); // Cube has 6 faces
+            ImGui::Text("Loader: %s", m_lastLoaderName.empty() ? "Unknown" : m_lastLoaderName.c_str());
+            ImGui::Text("Status: %s", m_lastLoadResult.success ? "Loaded" : "Failed");
+            if (!m_lastLoadResult.message.empty()) {
+                ImGui::Text("Message: %s", m_lastLoadResult.message.c_str());
+            }
+            if (m_lastLoadResult.fileSize > 0) {
+                ImGui::Text("File Size: %llu bytes", static_cast<unsigned long long>(m_lastLoadResult.fileSize));
+            }
+            if (selectedNode->kind == AssetKind::TextureBundle && m_lastLoadedPath == selectedNode->relativePath) {
+                ImGui::Separator();
+                if (m_loadedTextures.empty()) {
+                    ImGui::TextDisabled("No decoded textures");
+                } else {
+                    ImGui::Text("Textures: %zu", m_loadedTextures.size());
+                    ImVec2 listSize = ImVec2(-FLT_MIN, 160.0f);
+                    if (ImGui::BeginListBox("##glt_textures", listSize)) {
+                        for (size_t i = 0; i < m_loadedTextures.size(); ++i) {
+                            const auto& tex = m_loadedTextures[i];
+                            bool isSelected = static_cast<int>(i) == m_selectedTextureIndex;
+                            char label[128];
+                            std::snprintf(label, sizeof(label), "0x%08X  %ux%u", tex.hash, tex.width, tex.height);
+                            if (ImGui::Selectable(label, isSelected)) {
+                                m_selectedTextureIndex = static_cast<int>(i);
+                                m_textureZoom = 1.0f;
+                                m_texturePan = ImVec2(0.0f, 0.0f);
+                            }
+                            if (isSelected) {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndListBox();
+                    }
+
+                    ImGui::Separator();
+                    ImGui::Text("Thumbnails");
+                    ImGui::SliderFloat("##thumb_size", &m_thumbnailSize, 32.0f, 160.0f, "%.0f px");
+                    ImVec2 childSize = ImVec2(0.0f, 220.0f);
+                    ImGui::BeginChild("TextureThumbs", childSize, true, ImGuiWindowFlags_HorizontalScrollbar);
+                    float panelWidth = ImGui::GetContentRegionAvail().x;
+                    float padding = ImGui::GetStyle().ItemSpacing.x;
+                    float cellSize = m_thumbnailSize + padding;
+                    int columns = static_cast<int>(panelWidth / cellSize);
+                    if (columns < 1) {
+                        columns = 1;
+                    }
+                    int columnIndex = 0;
+                    for (size_t i = 0; i < m_loadedTextures.size(); ++i) {
+                        const auto& tex = m_loadedTextures[i];
+                        if (tex.textureId == 0) {
+                            continue;
+                        }
+                        ImGui::PushID(static_cast<int>(i));
+                        ImVec2 imageSize(m_thumbnailSize, m_thumbnailSize);
+                        if (ImGui::ImageButton("##thumb", (void*)(intptr_t)tex.textureId, imageSize, ImVec2(0, 0), ImVec2(1, 1))) {
+                            m_selectedTextureIndex = static_cast<int>(i);
+                            m_textureZoom = 1.0f;
+                            m_texturePan = ImVec2(0.0f, 0.0f);
+                        }
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("0x%08X", tex.hash);
+                            ImGui::Text("%ux%u", tex.width, tex.height);
+                            ImGui::Text("%s", textureFormatLabel(tex.format));
+                            ImGui::EndTooltip();
+                        }
+                        if (static_cast<int>(i) == m_selectedTextureIndex) {
+                            ImDrawList* drawList = ImGui::GetWindowDrawList();
+                            ImVec2 min = ImGui::GetItemRectMin();
+                            ImVec2 max = ImGui::GetItemRectMax();
+                            drawList->AddRect(min, max, IM_COL32(255, 200, 64, 255), 0.0f, 0, 2.0f);
+                        }
+                        ImGui::PopID();
+                        columnIndex++;
+                        if (columnIndex < columns) {
+                            ImGui::SameLine();
+                        } else {
+                            columnIndex = 0;
+                        }
+                    }
+                    ImGui::EndChild();
                 }
-            } else {
-                ImGui::TextDisabled("No mesh loaded");
             }
         }
     } else {
@@ -727,6 +685,57 @@ void Viewer::renderAssetTree() {
     }
     
     ImGui::End();
+}
+
+void Viewer::refreshAssetTree() {
+    m_assetTreeModel.loadFromFilesystem(m_config.assetsRoot);
+
+    if (!m_selectedAssetPath.empty()) {
+        const AssetNode* node = m_assetTreeModel.findByPath(m_selectedAssetPath);
+        if (!node) {
+            m_selectedAssetPath.clear();
+        }
+    }
+
+    if (m_selectedAssetPath.empty()) {
+        m_hasLoadResult = false;
+        m_lastLoadedPath.clear();
+        m_lastLoaderName.clear();
+        clearLoadedTextures();
+    }
+}
+
+void Viewer::handleAssetSelection(const AssetNode* node) {
+    m_hasLoadResult = false;
+    m_lastLoadedPath.clear();
+    m_lastLoaderName.clear();
+    clearLoadedTextures();
+
+    if (!node) {
+        return;
+    }
+
+    if (!isLoadable(node->kind)) {
+        return;
+    }
+
+    std::filesystem::path fullPath = std::filesystem::path(m_assetTreeModel.rootPath()) / node->relativePath;
+    const IAssetLoader* loader = m_assetLoaders.getLoaderForExtension(fullPath.extension().string());
+    if (!loader) {
+        m_lastLoadResult = {false, "No loader registered", 0};
+        m_hasLoadResult = true;
+        m_lastLoadedPath = node->relativePath;
+        return;
+    }
+
+    m_lastLoadResult = loader->load(fullPath);
+    m_lastLoaderName = loader->name();
+    m_lastLoadedPath = node->relativePath;
+    m_hasLoadResult = true;
+
+    if (node->kind == AssetKind::TextureBundle && m_lastLoadResult.success && m_lastLoadResult.textureBundle) {
+        buildLoadedTextures(*m_lastLoadResult.textureBundle);
+    }
 }
 
 void Viewer::renderViewport() {
@@ -747,8 +756,45 @@ void Viewer::renderViewport() {
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
     
     if (viewportSize.x > 0 && viewportSize.y > 0) {
-        // Render 3D scene if an asset is selected
-        if (m_selectedAsset) {
+        const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
+        bool isTexturePreview = selectedNode && selectedNode->kind == AssetKind::TextureBundle &&
+                                !m_loadedTextures.empty() && m_lastLoadedPath == selectedNode->relativePath;
+        bool canRender = selectedNode && isLoadable(selectedNode->kind) && !isTexturePreview;
+
+        if (isTexturePreview) {
+            const auto& texture = m_loadedTextures[std::clamp(m_selectedTextureIndex, 0, static_cast<int>(m_loadedTextures.size() - 1))];
+            if (m_isViewportHovered) {
+                float wheel = ImGui::GetIO().MouseWheel;
+                if (wheel != 0.0f) {
+                    float zoomFactor = std::pow(1.1f, wheel);
+                    m_textureZoom = std::clamp(m_textureZoom * zoomFactor, 0.1f, 32.0f);
+                }
+                if (ImGui::IsKeyPressed(ImGuiKey_R)) {
+                    m_textureZoom = 1.0f;
+                    m_texturePan = ImVec2(0.0f, 0.0f);
+                }
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+                    ImVec2 delta = ImGui::GetIO().MouseDelta;
+                    m_texturePan.x += delta.x;
+                    m_texturePan.y += delta.y;
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                }
+            }
+            float scaleX = viewportSize.x / static_cast<float>(texture.width);
+            float scaleY = viewportSize.y / static_cast<float>(texture.height);
+            float baseScale = std::min(1.0f, std::min(scaleX, scaleY));
+            float scale = baseScale * m_textureZoom;
+            ImVec2 imageSize(texture.width * scale, texture.height * scale);
+            ImVec2 imagePos((viewportSize.x - imageSize.x) * 0.5f + m_texturePan.x,
+                            (viewportSize.y - imageSize.y) * 0.5f + m_texturePan.y);
+            ImGui::SetCursorPos(imagePos);
+            ImGui::Image((void*)(intptr_t)texture.textureId, imageSize, ImVec2(0, 0), ImVec2(1, 1));
+
+            ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
+            ImGui::Text("Texture 0x%08X", texture.hash);
+            ImGui::Text("Size: %ux%u", texture.width, texture.height);
+            ImGui::Text("Format: %s", textureFormatLabel(texture.format));
+        } else if (canRender) {
             // Recreate framebuffer if size changed
             if (m_framebuffer == 0 || 
                 m_framebufferWidth != static_cast<int>(viewportSize.x) || 
@@ -791,7 +837,7 @@ void Viewer::renderViewport() {
         }
         
         // Camera info overlay (only when object selected and enabled)
-        if (m_selectedAsset && m_config.showCameraInfo) {
+        if (canRender && m_config.showCameraInfo) {
             ImGui::SetCursorPos(ImVec2(10, 35));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Fully transparent
             ImGui::BeginChild("CamInfo", ImVec2(250, 50), false, ImGuiWindowFlags_NoScrollbar);
@@ -803,7 +849,7 @@ void Viewer::renderViewport() {
         }
             
         // Controls hint (only when object selected and enabled)
-        if (m_selectedAsset && m_config.showControls) {
+        if (canRender && m_config.showControls) {
             ImGui::SetCursorPos(ImVec2(10, viewportSize.y - 80));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Fully transparent
             ImGui::BeginChild("Controls", ImVec2(250, 70), false, ImGuiWindowFlags_NoScrollbar);
@@ -825,6 +871,7 @@ void Viewer::shutdown() {
     
     // Cleanup framebuffer
     deleteFramebuffer();
+    clearLoadedTextures();
     
     // Cleanup ImGui only if it was initialized
     if (!m_noGui) {
@@ -894,6 +941,60 @@ void Viewer::deleteFramebuffer() {
     }
 }
 
+void Viewer::clearLoadedTextures() {
+    for (auto& texture : m_loadedTextures) {
+        if (texture.textureId != 0) {
+            glDeleteTextures(1, &texture.textureId);
+        }
+    }
+    m_loadedTextures.clear();
+    m_selectedTextureIndex = 0;
+    m_loadedTexturePath.clear();
+    m_textureZoom = 1.0f;
+    m_texturePan = ImVec2(0.0f, 0.0f);
+}
+
+void Viewer::buildLoadedTextures(const TextureBundle& bundle) {
+    clearLoadedTextures();
+    if (bundle.textures.empty()) {
+        return;
+    }
+
+    m_loadedTextures.reserve(bundle.textures.size());
+    GLint previousAlignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousAlignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    for (const auto& image : bundle.textures) {
+        if (image.rgba.empty() || image.width == 0 || image.height == 0) {
+            continue;
+        }
+        GLuint textureId = 0;
+        glGenTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.rgba.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        LoadedTexture entry;
+        entry.hash = image.hash;
+        entry.width = image.width;
+        entry.height = image.height;
+        entry.format = image.format;
+        entry.textureId = textureId;
+        m_loadedTextures.push_back(entry);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
+    m_loadedTexturePath = m_lastLoadedPath;
+    m_selectedTextureIndex = 0;
+    m_textureZoom = 1.0f;
+    m_texturePan = ImVec2(0.0f, 0.0f);
+}
+
 void Viewer::renderConfigDialog() {
     ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Settings", &m_showConfigDialog)) {
@@ -939,6 +1040,30 @@ void Viewer::renderConfigDialog() {
         if (fontChanged) {
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Restart required for font changes");
         }
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.8f, 0.9f, 1.0f, 1.0f), "Asset Settings");
+        ImGui::Separator();
+        ImGui::InputText("Assets Root", m_assetsRootBuffer.data(), m_assetsRootBuffer.size());
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...")) {
+            openFolderPicker();
+        }
+        if (ImGui::Button("Apply & Rescan")) {
+            std::string newRoot = std::string(m_assetsRootBuffer.data());
+            if (newRoot != m_config.assetsRoot) {
+                m_config.assetsRoot = newRoot;
+                configChanged = true;
+            }
+            refreshAssetTree();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Rescan")) {
+            refreshAssetTree();
+        }
+        const AssetTreeStats& stats = m_assetTreeModel.stats();
+        ImGui::Text("Items: %zu (Folders: %zu, Files: %zu, Loadable: %zu)",
+                    stats.nodeCount, stats.folderCount, stats.fileCount, stats.loadableCount);
         
         // Auto-save when config changes
         if (configChanged) {
@@ -953,6 +1078,107 @@ void Viewer::renderConfigDialog() {
                           "Settings are saved automatically");
     }
     ImGui::End();
+
+    renderFolderPicker();
+}
+
+void Viewer::openFolderPicker() {
+    std::filesystem::path startPath = m_config.assetsRoot;
+    if (startPath.empty() || !std::filesystem::exists(startPath)) {
+        startPath = std::filesystem::current_path();
+    }
+    if (!std::filesystem::is_directory(startPath)) {
+        startPath = startPath.parent_path();
+    }
+    m_folderPickerPath = startPath.string();
+    m_folderPickerSelected.clear();
+    m_openFolderPicker = true;
+}
+
+void Viewer::renderFolderPicker() {
+    if (m_openFolderPicker) {
+        ImGui::OpenPopup("Select Asset Root");
+        m_openFolderPicker = false;
+    }
+
+    if (ImGui::BeginPopupModal("Select Asset Root", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::filesystem::path currentPath = m_folderPickerPath;
+        if (currentPath.empty()) {
+            currentPath = std::filesystem::current_path();
+            m_folderPickerPath = currentPath.string();
+        }
+
+        ImGui::Text("Current: %s", currentPath.string().c_str());
+
+        if (ImGui::Button("Up") && currentPath.has_parent_path()) {
+            currentPath = currentPath.parent_path();
+            m_folderPickerPath = currentPath.string();
+            m_folderPickerSelected.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh")) {
+            m_folderPickerSelected.clear();
+        }
+
+        ImGui::Separator();
+
+        ImGui::BeginChild("FolderPickerList", ImVec2(520, 300), true);
+        std::vector<std::filesystem::path> directories;
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(currentPath)) {
+                if (entry.is_directory()) {
+                    directories.push_back(entry.path());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        std::sort(directories.begin(), directories.end(), [](const auto& a, const auto& b) {
+            return a.filename().string() < b.filename().string();
+        });
+
+        if (directories.empty()) {
+            ImGui::TextDisabled("No subfolders");
+        } else {
+            for (const auto& dir : directories) {
+                const std::string name = dir.filename().string();
+                const std::string fullPath = dir.string();
+                bool selected = (m_folderPickerSelected == fullPath);
+                if (ImGui::Selectable(name.c_str(), selected)) {
+                    m_folderPickerSelected = fullPath;
+                }
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                    m_folderPickerPath = fullPath;
+                    m_folderPickerSelected.clear();
+                }
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::Separator();
+
+        std::filesystem::path selectedPath = currentPath;
+        if (!m_folderPickerSelected.empty()) {
+            selectedPath = m_folderPickerSelected;
+        }
+
+        if (ImGui::Button("Select")) {
+            std::string chosen = selectedPath.string();
+            std::snprintf(m_assetsRootBuffer.data(), m_assetsRootBuffer.size(), "%s", chosen.c_str());
+            if (chosen != m_config.assetsRoot) {
+                m_config.assetsRoot = chosen;
+                m_config.save(Config::getDefaultPath());
+            }
+            refreshAssetTree();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void Viewer::render3DScene(int width, int height) {

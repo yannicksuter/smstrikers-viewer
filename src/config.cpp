@@ -57,6 +57,8 @@ bool Config::load(const std::string& filename) {
             fontOversampleV = std::stoi(value);
         } else if (key == "fontPixelSnapH") {
             fontPixelSnapH = (value == "true" || value == "1");
+        } else if (key == "assetsRoot") {
+            assetsRoot = value;
         }
     }
     
@@ -85,6 +87,8 @@ bool Config::save(const std::string& filename) const {
     file << "fontOversampleH=" << fontOversampleH << "\n";
     file << "fontOversampleV=" << fontOversampleV << "\n";
     file << "fontPixelSnapH=" << (fontPixelSnapH ? "true" : "false") << "\n";
+    file << "\n# Asset Settings\n";
+    file << "assetsRoot=" << assetsRoot << "\n";
     
     std::cout << "Saved config to: " << filename << std::endl;
     return true;
