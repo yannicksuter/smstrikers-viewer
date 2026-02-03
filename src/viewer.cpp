@@ -380,32 +380,40 @@ void Viewer::renderUI() {
     
     // Main menu bar
     renderMenuBar();
-    
-    // Setup dockspace over the viewport
+
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-    window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("DockSpace", nullptr, window_flags);
-    ImGui::PopStyleVar(3);
-    
-    // Create dockspace
-    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-    
-    ImGui::End();
-    
-    // Render Assets first so it can dock left, then Viewport fills remaining space
-    renderAssetTree();
-    renderViewport();
+    ImVec2 workPos = viewport->WorkPos;
+    ImVec2 workSize = viewport->WorkSize;
+
+    const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
+    bool showThumbnails = selectedNode && selectedNode->kind == AssetKind::TextureBundle;
+
+    constexpr float leftRatio = 0.22f;
+    constexpr float rightRatio = 0.22f;
+    constexpr float thumbHeight = 220.0f;
+    float leftWidth = workSize.x * leftRatio;
+    float rightWidth = workSize.x * rightRatio;
+    float centerWidth = std::max(0.0f, workSize.x - leftWidth - rightWidth);
+    float centerHeight = std::max(0.0f, workSize.y - (showThumbnails ? thumbHeight : 0.0f));
+
+    ImVec2 assetsPos = workPos;
+    ImVec2 assetsSize(leftWidth, workSize.y);
+
+    ImVec2 propsPos(workPos.x + workSize.x - rightWidth, workPos.y);
+    ImVec2 propsSize(rightWidth, workSize.y);
+
+    ImVec2 viewportPos(workPos.x + leftWidth, workPos.y);
+    ImVec2 viewportSize(centerWidth, centerHeight);
+
+    ImVec2 thumbsPos(workPos.x + leftWidth, workPos.y + centerHeight);
+    ImVec2 thumbsSize(centerWidth, thumbHeight);
+
+    renderAssetTreePanel(assetsPos, assetsSize);
+    renderPropertiesPanel(propsPos, propsSize);
+    renderViewportPanel(viewportPos, viewportSize);
+    if (showThumbnails) {
+        renderThumbnailsPanel(thumbsPos, thumbsSize);
+    }
     
     // Config dialog
     if (m_showConfigDialog) {
@@ -546,16 +554,11 @@ void Viewer::renderMenuBar() {
     }
 }
 
-void Viewer::renderAssetTree() {
-    // Initial size
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowSize(ImVec2(300, viewport->WorkSize.y), ImGuiCond_FirstUseEver);
-    
-    // Dock to left side on first use
-    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
-    
-    ImGui::Begin("Assets");
+void Viewer::renderAssetTreePanel(const ImVec2& pos, const ImVec2& size) {
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Assets", nullptr, flags);
 
     ImGui::Text("Root: %s", m_config.assetsRoot.c_str());
     if (!m_assetTreeModel.hasRoot() || m_assetTreeModel.roots().empty()) {
@@ -563,9 +566,7 @@ void Viewer::renderAssetTree() {
     }
 
     std::string previousSelection = m_selectedAssetPath;
-
-    // Render root items in a child window (top section)
-    ImGui::BeginChild("AssetTreeView", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 8), false);
+    ImGui::BeginChild("AssetTreeView", ImVec2(0.0f, 0.0f), false);
     if (!m_assetTreeModel.roots().empty()) {
         m_assetTreeView.renderTree(m_assetTreeModel.roots(), m_selectedAssetPath);
     }
@@ -575,12 +576,16 @@ void Viewer::renderAssetTree() {
         const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
         handleAssetSelection(selectedNode);
     }
-    
-    // Properties section (bottom section)
-    ImGui::Separator();
-    ImGui::Text("Properties");
-    ImGui::Separator();
-    
+
+    ImGui::End();
+}
+
+void Viewer::renderPropertiesPanel(const ImVec2& pos, const ImVec2& size) {
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Properties", nullptr, flags);
+
     const AssetNode* selectedNode = m_assetTreeModel.findByPath(m_selectedAssetPath);
     if (selectedNode) {
         ImGui::Text("Name: %s", selectedNode->name.c_str());
@@ -605,85 +610,105 @@ void Viewer::renderAssetTree() {
             if (m_lastLoadResult.fileSize > 0) {
                 ImGui::Text("File Size: %llu bytes", static_cast<unsigned long long>(m_lastLoadResult.fileSize));
             }
-            if (selectedNode->kind == AssetKind::TextureBundle && m_lastLoadedPath == selectedNode->relativePath) {
-                ImGui::Separator();
-                if (m_loadedTextures.empty()) {
-                    ImGui::TextDisabled("No decoded textures");
-                } else {
-                    ImGui::Text("Textures: %zu", m_loadedTextures.size());
-                    ImVec2 listSize = ImVec2(-FLT_MIN, 160.0f);
-                    if (ImGui::BeginListBox("##glt_textures", listSize)) {
-                        for (size_t i = 0; i < m_loadedTextures.size(); ++i) {
-                            const auto& tex = m_loadedTextures[i];
-                            bool isSelected = static_cast<int>(i) == m_selectedTextureIndex;
-                            char label[128];
-                            std::snprintf(label, sizeof(label), "0x%08X  %ux%u", tex.hash, tex.width, tex.height);
-                            if (ImGui::Selectable(label, isSelected)) {
-                                m_selectedTextureIndex = static_cast<int>(i);
-                                m_textureZoom = 1.0f;
-                                m_texturePan = ImVec2(0.0f, 0.0f);
-                            }
-                            if (isSelected) {
-                                ImGui::SetItemDefaultFocus();
-                            }
-                        }
-                        ImGui::EndListBox();
-                    }
+        }
 
-                    ImGui::Separator();
-                    ImGui::Text("Thumbnails");
-                    ImGui::SliderFloat("##thumb_size", &m_thumbnailSize, 32.0f, 160.0f, "%.0f px");
-                    ImVec2 childSize = ImVec2(0.0f, 220.0f);
-                    ImGui::BeginChild("TextureThumbs", childSize, true, ImGuiWindowFlags_HorizontalScrollbar);
-                    float panelWidth = ImGui::GetContentRegionAvail().x;
-                    float padding = ImGui::GetStyle().ItemSpacing.x;
-                    float cellSize = m_thumbnailSize + padding;
-                    int columns = static_cast<int>(panelWidth / cellSize);
-                    if (columns < 1) {
-                        columns = 1;
-                    }
-                    int columnIndex = 0;
+        if (selectedNode->kind == AssetKind::TextureBundle && m_lastLoadedPath == selectedNode->relativePath) {
+            ImGui::Separator();
+            if (m_loadedTextures.empty()) {
+                ImGui::TextDisabled("No decoded textures");
+            } else {
+                ImGui::Text("Textures: %zu", m_loadedTextures.size());
+                ImVec2 listSize = ImVec2(-FLT_MIN, 180.0f);
+                if (ImGui::BeginListBox("##glt_textures", listSize)) {
                     for (size_t i = 0; i < m_loadedTextures.size(); ++i) {
                         const auto& tex = m_loadedTextures[i];
-                        if (tex.textureId == 0) {
-                            continue;
-                        }
-                        ImGui::PushID(static_cast<int>(i));
-                        ImVec2 imageSize(m_thumbnailSize, m_thumbnailSize);
-                        if (ImGui::ImageButton("##thumb", (void*)(intptr_t)tex.textureId, imageSize, ImVec2(0, 0), ImVec2(1, 1))) {
+                        bool isSelected = static_cast<int>(i) == m_selectedTextureIndex;
+                        char label[128];
+                        std::snprintf(label, sizeof(label), "0x%08X  %ux%u", tex.hash, tex.width, tex.height);
+                        if (ImGui::Selectable(label, isSelected)) {
                             m_selectedTextureIndex = static_cast<int>(i);
                             m_textureZoom = 1.0f;
                             m_texturePan = ImVec2(0.0f, 0.0f);
                         }
-                        if (ImGui::IsItemHovered()) {
-                            ImGui::BeginTooltip();
-                            ImGui::Text("0x%08X", tex.hash);
-                            ImGui::Text("%ux%u", tex.width, tex.height);
-                            ImGui::Text("%s", textureFormatLabel(tex.format));
-                            ImGui::EndTooltip();
-                        }
-                        if (static_cast<int>(i) == m_selectedTextureIndex) {
-                            ImDrawList* drawList = ImGui::GetWindowDrawList();
-                            ImVec2 min = ImGui::GetItemRectMin();
-                            ImVec2 max = ImGui::GetItemRectMax();
-                            drawList->AddRect(min, max, IM_COL32(255, 200, 64, 255), 0.0f, 0, 2.0f);
-                        }
-                        ImGui::PopID();
-                        columnIndex++;
-                        if (columnIndex < columns) {
-                            ImGui::SameLine();
-                        } else {
-                            columnIndex = 0;
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
                         }
                     }
-                    ImGui::EndChild();
+                    ImGui::EndListBox();
                 }
+
+                const auto& tex = m_loadedTextures[std::clamp(m_selectedTextureIndex, 0, static_cast<int>(m_loadedTextures.size() - 1))];
+                ImGui::Separator();
+                ImGui::Text("Selected Texture");
+                ImGui::Text("Hash: 0x%08X", tex.hash);
+                ImGui::Text("Size: %ux%u", tex.width, tex.height);
+                ImGui::Text("Format: %s", textureFormatLabel(tex.format));
+                ImGui::TextDisabled("Wheel: zoom | RMB drag: pan | R: reset");
             }
         }
     } else {
         ImGui::TextDisabled("No asset selected");
     }
-    
+
+    ImGui::End();
+}
+
+void Viewer::renderThumbnailsPanel(const ImVec2& pos, const ImVec2& size) {
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Thumbnails", nullptr, flags);
+
+    if (m_loadedTextures.empty()) {
+        ImGui::TextDisabled("No decoded textures");
+        ImGui::End();
+        return;
+    }
+
+    ImGui::SliderFloat("##thumb_size", &m_thumbnailSize, 32.0f, 160.0f, "%.0f px");
+    ImGui::BeginChild("TextureThumbs", ImVec2(0.0f, 0.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+    float panelWidth = ImGui::GetContentRegionAvail().x;
+    float padding = ImGui::GetStyle().ItemSpacing.x;
+    float cellSize = m_thumbnailSize + padding;
+    int columns = static_cast<int>(panelWidth / cellSize);
+    if (columns < 1) {
+        columns = 1;
+    }
+    int columnIndex = 0;
+    for (size_t i = 0; i < m_loadedTextures.size(); ++i) {
+        const auto& tex = m_loadedTextures[i];
+        if (tex.textureId == 0) {
+            continue;
+        }
+        ImGui::PushID(static_cast<int>(i));
+        ImVec2 imageSize(m_thumbnailSize, m_thumbnailSize);
+        if (ImGui::ImageButton("##thumb", (void*)(intptr_t)tex.textureId, imageSize, ImVec2(0, 0), ImVec2(1, 1))) {
+            m_selectedTextureIndex = static_cast<int>(i);
+            m_textureZoom = 1.0f;
+            m_texturePan = ImVec2(0.0f, 0.0f);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("0x%08X", tex.hash);
+            ImGui::Text("%ux%u", tex.width, tex.height);
+            ImGui::Text("%s", textureFormatLabel(tex.format));
+            ImGui::EndTooltip();
+        }
+        if (static_cast<int>(i) == m_selectedTextureIndex) {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImVec2 min = ImGui::GetItemRectMin();
+            ImVec2 max = ImGui::GetItemRectMax();
+            drawList->AddRect(min, max, IM_COL32(255, 200, 64, 255), 0.0f, 0, 2.0f);
+        }
+        ImGui::PopID();
+        columnIndex++;
+        if (columnIndex < columns) {
+            ImGui::SameLine();
+        } else {
+            columnIndex = 0;
+        }
+    }
+    ImGui::EndChild();
     ImGui::End();
 }
 
@@ -710,6 +735,11 @@ void Viewer::handleAssetSelection(const AssetNode* node) {
     m_lastLoadedPath.clear();
     m_lastLoaderName.clear();
     clearLoadedTextures();
+    m_textureZoom = 1.0f;
+    m_texturePan = ImVec2(0.0f, 0.0f);
+    if (m_camera) {
+        m_camera->reset();
+    }
 
     if (!node) {
         return;
@@ -738,14 +768,12 @@ void Viewer::handleAssetSelection(const AssetNode* node) {
     }
 }
 
-void Viewer::renderViewport() {
-    // Viewport can't be closed but has title bar for proper decoration
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse;
-    
-    // Dock to dockspace on first use (will take up remaining space)
-    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
-    
+void Viewer::renderViewportPanel(const ImVec2& pos, const ImVec2& size) {
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Viewport", nullptr, window_flags);
     
@@ -790,10 +818,6 @@ void Viewer::renderViewport() {
             ImGui::SetCursorPos(imagePos);
             ImGui::Image((void*)(intptr_t)texture.textureId, imageSize, ImVec2(0, 0), ImVec2(1, 1));
 
-            ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
-            ImGui::Text("Texture 0x%08X", texture.hash);
-            ImGui::Text("Size: %ux%u", texture.width, texture.height);
-            ImGui::Text("Format: %s", textureFormatLabel(texture.format));
         } else if (canRender) {
             // Recreate framebuffer if size changed
             if (m_framebuffer == 0 || 

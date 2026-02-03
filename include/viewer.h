@@ -82,8 +82,10 @@ private:
     
     // UI rendering
     void renderUI();
-    void renderAssetTree();
-    void renderViewport();
+    void renderAssetTreePanel(const ImVec2& pos, const ImVec2& size);
+    void renderPropertiesPanel(const ImVec2& pos, const ImVec2& size);
+    void renderViewportPanel(const ImVec2& pos, const ImVec2& size);
+    void renderThumbnailsPanel(const ImVec2& pos, const ImVec2& size);
     void renderMenuBar();
     void renderConfigDialog();
     void renderFolderPicker();
