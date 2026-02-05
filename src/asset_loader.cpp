@@ -311,7 +311,7 @@ void decodeCMPRBlock(const uint8_t* block, uint8_t colors[4][4]) {
     }
 }
 
-void decodeCMPR(const uint8_t* data, int width, int height, std::vector<uint8_t>& out) {
+void decodeCMPR(const uint8_t* data, int width, int height, std::vector<uint8_t>& out, bool msbFirst) {
     TileInfo info{8, 8, 32};
     int tilesX = (width + info.tileW - 1) / info.tileW;
     int tilesY = (height + info.tileH - 1) / info.tileH;
@@ -328,7 +328,7 @@ void decodeCMPR(const uint8_t* data, int width, int height, std::vector<uint8_t>
                     for (int py = 0; py < 4; ++py) {
                         for (int px = 0; px < 4; ++px) {
                             int pixelIndex = py * 4 + px;
-                            int shift = 30 - (pixelIndex * 2);
+                            int shift = msbFirst ? (30 - pixelIndex * 2) : (pixelIndex * 2);
                             uint8_t code = static_cast<uint8_t>((indices >> shift) & 0x3);
                             int x = tx * info.tileW + blockX * 4 + px;
                             int y = ty * info.tileH + blockY * 4 + py;
@@ -346,6 +346,31 @@ void decodeCMPR(const uint8_t* data, int width, int height, std::vector<uint8_t>
             offset += info.bytesPerTile;
         }
     }
+}
+
+uint64_t computeEdgeEnergy(const std::vector<uint8_t>& rgba, int width, int height) {
+    uint64_t energy = 0;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            size_t index = static_cast<size_t>((y * width + x) * 4);
+            uint8_t r = rgba[index];
+            uint8_t g = rgba[index + 1];
+            uint8_t b = rgba[index + 2];
+            if (x + 1 < width) {
+                size_t right = static_cast<size_t>((y * width + x + 1) * 4);
+                energy += std::abs(rgba[right] - r);
+                energy += std::abs(rgba[right + 1] - g);
+                energy += std::abs(rgba[right + 2] - b);
+            }
+            if (y + 1 < height) {
+                size_t down = static_cast<size_t>(((y + 1) * width + x) * 4);
+                energy += std::abs(rgba[down] - r);
+                energy += std::abs(rgba[down + 1] - g);
+                energy += std::abs(rgba[down + 2] - b);
+            }
+        }
+    }
+    return energy;
 }
 
 bool decodeTexture(uint32_t format, int width, int height, const uint8_t* data,
@@ -376,9 +401,18 @@ bool decodeTexture(uint32_t format, int width, int height, const uint8_t* data,
     case GXTex_CI8:
         decodeCI8(data, width, height, palette, out);
         return true;
-    case GXTex_CMPR:
-        decodeCMPR(data, width, height, out);
+    case GXTex_CMPR: {
+        std::vector<uint8_t> optionA;
+        std::vector<uint8_t> optionB;
+        optionA.assign(static_cast<size_t>(width) * static_cast<size_t>(height) * 4, 0);
+        optionB.assign(static_cast<size_t>(width) * static_cast<size_t>(height) * 4, 0);
+        decodeCMPR(data, width, height, optionA, true);
+        decodeCMPR(data, width, height, optionB, false);
+        uint64_t energyA = computeEdgeEnergy(optionA, width, height);
+        uint64_t energyB = computeEdgeEnergy(optionB, width, height);
+        out = (energyA <= energyB) ? std::move(optionA) : std::move(optionB);
         return true;
+    }
     default:
         return false;
     }
@@ -424,6 +458,8 @@ AssetLoadResult loadTextureBundle(const std::filesystem::path& path) {
             return result;
         }
 
+        result.fileSize = std::filesystem::file_size(path);
+
         std::ifstream file(path, std::ios::binary);
         if (!file) {
             result.message = "Failed to open file";
@@ -458,6 +494,50 @@ AssetLoadResult loadTextureBundle(const std::filesystem::path& path) {
             size_t numEntriesOffset;
             bool hasNumEntries;
             const char* label;
+        };
+
+        auto countFileSizeMatches = [&](const GltLayout& layout) -> int {
+            constexpr size_t kMaxPadding = 0x20;
+            uint32_t numTextures = readU32BE(data, 4);
+            if (numTextures == 0 || numTextures > 10000) {
+                return 0;
+            }
+            size_t dictSize = static_cast<size_t>(numTextures) * 0x10;
+            if (layout.dictOffset + dictSize > data.size()) {
+                return 0;
+            }
+            size_t textureDataOffset = layout.dictOffset + dictSize;
+            int matches = 0;
+
+            for (uint32_t i = 0; i < numTextures; ++i) {
+                size_t entryOffset = layout.dictOffset + static_cast<size_t>(i) * 0x10;
+                uint32_t offset = readU32BE(data, entryOffset + 4);
+                uint32_t fileSize = readU32BE(data, entryOffset + 8);
+                if (fileSize == 0) {
+                    continue;
+                }
+
+                size_t textureOffset = textureDataOffset + offset;
+                if (textureOffset + layout.headerSize > data.size()) {
+                    continue;
+                }
+
+                uint32_t numLevels = readU32BE(data, textureOffset);
+                uint32_t format = readU32BE(data, textureOffset + 4);
+                uint16_t width = readU16BE(data, textureOffset + layout.widthOffset);
+                uint16_t height = readU16BE(data, textureOffset + layout.heightOffset);
+                if (numLevels == 0 || format > GXTex_CI8 || width == 0 || height == 0) {
+                    continue;
+                }
+
+                size_t textureDataSize = gcTextureSize(format, width, height, static_cast<int>(numLevels));
+                size_t expectedSize = layout.headerSize + textureDataSize;
+                if (expectedSize + kMaxPadding >= fileSize && expectedSize <= fileSize + kMaxPadding) {
+                    matches += 1;
+                }
+            }
+
+            return matches;
         };
 
         auto parseBundle = [&](const GltLayout& layout) -> std::shared_ptr<TextureBundle> {
@@ -551,10 +631,24 @@ AssetLoadResult loadTextureBundle(const std::filesystem::path& path) {
         if (bundle) {
             std::cout << "GLT parsed using " << layout20.label << ": " << bundle->textures.size() << " textures\n";
         } else {
-            const GltLayout layout10 {0x10, 0x10, 0x0C, 0x0E, 0, false, "layout10"};
-            bundle = parseBundle(layout10);
+            const GltLayout layout10a {0x10, 0x10, 0x0C, 0x0E, 0, false, "layout10a"};
+            const GltLayout layout10b {0x10, 0x10, 0x0E, 0x10, 0, false, "layout10b"};
+            int matchesA = countFileSizeMatches(layout10a);
+            int matchesB = countFileSizeMatches(layout10b);
+            const GltLayout* preferred = (matchesB > matchesA) ? &layout10b : &layout10a;
+
+            bundle = parseBundle(*preferred);
+            if (!bundle && matchesA == matchesB) {
+                const GltLayout* fallback = (preferred == &layout10a) ? &layout10b : &layout10a;
+                bundle = parseBundle(*fallback);
+                if (bundle) {
+                    preferred = fallback;
+                }
+            }
+
             if (bundle) {
-                std::cout << "GLT parsed using " << layout10.label << ": " << bundle->textures.size() << " textures\n";
+                std::cout << "GLT parsed using " << preferred->label << ": " << bundle->textures.size()
+                          << " textures (matches " << matchesA << ", " << matchesB << ")\n";
             }
         }
 
@@ -564,7 +658,6 @@ AssetLoadResult loadTextureBundle(const std::filesystem::path& path) {
         }
 
         result.success = true;
-        result.fileSize = std::filesystem::file_size(path);
         result.textureBundle = bundle;
         std::ostringstream message;
         message << "Loaded " << bundle->textures.size() << " texture";

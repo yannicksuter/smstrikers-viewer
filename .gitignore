@@ -116,6 +116,12 @@ screenshots/
 *.jpg
 *.jpeg
 
+# Documentation images
+!docs/images/
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.jpeg
+
 # Distribution
 dist/
 package/

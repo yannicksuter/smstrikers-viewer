@@ -2,7 +2,7 @@
 
 A cross-platform model and content viewer for Super Mario Strikers (Nintendo GameCube, 2005).
 
-## ⚠️ Important Legal Disclaimer
+## Important Legal Disclaimer
 
 **This project does NOT contain any assets from the original game.**
 
@@ -14,14 +14,18 @@ To use this viewer, you **MUST** own a legitimate copy of Super Mario Strikers a
 
 This project is a companion tool to the Super Mario Strikers decompilation project. It uses the knowledge gained during the decompilation process to read and interpret game assets for viewing and analysis purposes.
 
-### Current Features
-- 🚧 Project in early development
+![Texture bundles viewer](docs/images/texture_bundles.png)
+
+### Viewer Progress
+- Most `.glt` texture bundles load and display textures
+- Some bundles/textures are still broken and need investigation
+- `.glg` model bundle support is not implemented yet
 
 ### Planned Features
-- 📦 Model viewing (initial focus)
-- 🎬 Animation playback
-- 📜 Script analysis
-- 🔍 Asset inspection tools
+- Model viewing (initial focus)
+- Animation playback
+- Script analysis
+- Asset inspection tools
 
 ### Not in Scope
 - This is **NOT** a recompilation project
@@ -89,19 +93,6 @@ sudo apt-get install cmake ninja-build build-essential libgl1-mesa-dev
 - Install CMake from https://cmake.org
 - Optionally install Ninja from https://ninja-build.org
 
-## Project Structure
-
-```
-smstrikers-viewer/
-├── src/           # Source files
-├── include/       # Header files
-├── external/      # Third-party libraries
-├── docs/          # Documentation
-├── assets/        # Example/test assets (NOT game assets)
-├── build/         # Build output (gitignored)
-└── CMakeLists.txt # Build configuration
-```
-
 ## Usage
 
 ### Running the Viewer
@@ -132,8 +123,6 @@ smstrikers-viewer/
 
 3. **Launch the viewer** and browse your assets!
 
-See [docs/ASSETS.md](docs/ASSETS.md) for detailed documentation on the asset system.
-
 ### Controls
 
 - **Right Mouse Button**: Rotate camera around object
@@ -155,15 +144,16 @@ Available settings:
 
 ## Current Features
 
-✅ Asset browser backed by filesystem scan  
-✅ Orbital camera controls  
-✅ Multiple render modes (Wireframe, Opaque, Shaded)  
-✅ Configurable UI and controls  
-✅ Command-line options  
+Asset browser backed by filesystem scan  
+Orbital camera controls  
+Multiple render modes (Wireframe, Opaque, Shaded)  
+Configurable UI and controls  
+Command-line options  
+`.glt` texture bundle loading with texture preview (most files)  
 
-🚧 Game asset format parsing (in development)  
-🚧 Texture loading  
-🚧 Animation playback  
+Some `.glt` bundles/textures are still broken and need investigation  
+`.glg` model bundle loading  
+Animation playback  
 
 ## Contributing
 
