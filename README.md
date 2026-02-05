@@ -27,18 +27,6 @@ This project is a companion tool to the Super Mario Strikers decompilation proje
 - Script analysis
 - Asset inspection tools
 
-### Not in Scope
-- This is **NOT** a recompilation project
-- This is **NOT** a port to other platforms
-- This is **NOT** a game engine
-
-## Technical Stack
-
-- **Language**: C++
-- **Graphics**: OpenGL
-- **Build System**: CMake (generates Ninja files)
-- **Platform Support**: macOS, Linux, Windows
-
 ## Building
 
 ### Prerequisites
@@ -103,7 +91,6 @@ sudo apt-get install cmake ninja-build build-essential libgl1-mesa-dev
 
 # Or with command-line options
 ./build/bin/smstrikers-viewer --no_gui          # Headless mode (for testing)
-./build/bin/smstrikers-viewer --object Mario    # Preselect an object
 ```
 
 ### Setting Up Assets
@@ -112,48 +99,15 @@ sudo apt-get install cmake ninja-build build-essential libgl1-mesa-dev
    - Use Dolphin Emulator's filesystem browser (Right-click game → Properties → Filesystem)
    - Export files to your configured asset root (default: `game_assets/`)
 
-2. **Organize files** following the recommended structure:
-   ```
-   game_assets/
-   ├── models/
-   │   ├── characters/
-   │   └── environments/
-   └── textures/
-   ```
+2. **Launch the viewer** and browse your assets!
 
-3. **Launch the viewer** and browse your assets!
-
-### Controls
+### Controls (might be outdated..)
 
 - **Right Mouse Button**: Rotate camera around object
 - **Middle Mouse Button**: Pan camera
 - **Mouse Wheel**: Zoom in/out
 - **Home Key**: Reset camera to default position
 - **ESC**: Exit application
-
-### Configuration
-
-Settings are saved automatically to `~/.smstrikers-viewer.conf`. Access them via:
-- **Menu**: View → Settings
-
-Available settings:
-- Camera controls (pan inversion)
-- Default render mode (Wireframe/Opaque/Shaded)
-- UI visibility (gizmo, camera info, controls)
-- Asset root path (filesystem-based tree)
-
-## Current Features
-
-Asset browser backed by filesystem scan  
-Orbital camera controls  
-Multiple render modes (Wireframe, Opaque, Shaded)  
-Configurable UI and controls  
-Command-line options  
-`.glt` texture bundle loading with texture preview (most files)  
-
-Some `.glt` bundles/textures are still broken and need investigation  
-`.glg` model bundle loading  
-Animation playback  
 
 ## Contributing
 
@@ -178,6 +132,5 @@ This project is not affiliated with, endorsed by, or connected to Nintendo in an
 
 ## Acknowledgments
 
-- The Super Mario Strikers decompilation community
-- Contributors to reverse engineering documentation
+- This project wouldn’t be possible without the collective knowledge, tools, and support of the broader decompilation community. Huge thanks to contributors of other GameCube decomp projects, the teams behind decomp.dev and decomp.me, and the incredibly helpful discussions happening on Discord. These resources have been invaluable for solving problems, speeding up setup, and staying motivated throughout the process.
 - Open source library maintainers
